@@ -1,0 +1,14 @@
+Evocraft-py/*
+.mixin.out/*
+config/*
+logs/*
+mods/*
+world/*
+eula.txt
+server.pro
+banned-ips.json
+banned-players.json
+ops.json
+usercache.json
+whitelist.json
+server.properties
