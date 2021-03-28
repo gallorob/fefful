@@ -12,3 +12,4 @@ ops.json
 usercache.json
 whitelist.json
 server.properties
+.DS_Store
