@@ -1,4 +1,5 @@
 Evocraft-py/*
+PyTorch-NEAT/*
 .mixin.out/*
 config/*
 logs/*
