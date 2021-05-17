@@ -135,6 +135,9 @@ class MCEvaluator:
             ])
         )
 
+    def minimum_criterion(self, artifact):
+        return True
+
     def eval_genomes(self,
                      genomes: Union[neat.DefaultGenome, List[neat.DefaultGenome]],
                      config: neat.Config,
@@ -154,7 +157,6 @@ class MCEvaluator:
                                        self.mc_settings.artifact_height,
                                        self.mc_settings.artifact_depth,
                                        2))
-            blocks = []
             for x in range(self.mc_settings.artifact_width):
                 for y in range(self.mc_settings.artifact_height):
                     for z in range(self.mc_settings.artifact_depth):
@@ -166,22 +168,36 @@ class MCEvaluator:
                                             z_in=th.as_tensor(z / self.mc_settings.artifact_depth))
 
                         artifact[x, y, z, :] = [block_type, block_rot]
+            # add to database
+            all_artifacts.append(artifact)
+
+        # filter artifacts with the Minimum Criterion and spawn survivors in MC
+        decent_artifacts = [artifact for artifact in all_artifacts if self.minimum_criterion(artifact)]
+        print(f'{len(decent_artifacts)} artifacts survived the minimum criterion')
+        for i, artifact in enumerate(decent_artifacts):
+            blocks = []
+            for x in range(self.mc_settings.artifact_width):
+                for y in range(self.mc_settings.artifact_height):
+                    for z in range(self.mc_settings.artifact_depth):
+                        block_type, block_rot = artifact[x, y, z, :]
                         # transform block to valid enums
                         block_type = self.mc_settings.val_to_enum(val=block_type,
                                                                   block=True)
                         block_rot = self.mc_settings.val_to_enum(val=block_rot,
                                                                  block=False)
+                        block_x = self.mc_settings.x0 + x + \
+                                    (i * (self.mc_settings.artifact_width + \
+                                     self.mc_settings.artifact_spacing))
+                        block_y = self.mc_settings.y0 + y
+                        block_z = self.mc_settings.z0 + z
                         blocks.append(
-                            Block(position=Point(x=self.mc_settings.x0 + x + (
-                                        i * (self.mc_settings.artifact_width + self.mc_settings.artifact_spacing)),
-                                                 y=self.mc_settings.y0 + y,
-                                                 z=self.mc_settings.z0 + z),
+                            Block(position=Point(x=block_x, y=block_y, z=block_z),
                                   type=block_type,
                                   orientation=block_rot)
                         )
-            # add to database and spawn artifact in-game
-            all_artifacts.append(artifact)
+
             self.client.spawnBlocks(Blocks(blocks=blocks))
+
         # get user's input
         fitnesses = list(map(int, input('Enter interesting artifacts (csv): ').split(',')))
         assert len(fitnesses) <= self.pop_size, f'Too many fitness values: expected {self.pop_size}, received {len(fitnesses)}'
