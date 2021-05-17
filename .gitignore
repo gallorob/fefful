@@ -19,3 +19,6 @@ mc_settings.json
 .DS_Store
 __pycache__/*
 pytorch_neat/__pycache__/*
+pytorch_neat/*
+minecraft_pb2.py
+minecraft_pb2_grpc.py

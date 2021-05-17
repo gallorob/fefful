@@ -1,4 +1,5 @@
 import os
+import configparser
 from typing import Any, Tuple, Union, List
 
 import neat
@@ -14,29 +15,25 @@ from pytorch_neat.neat_reporter import LogReporter
 
 
 class MCSettings:
-    def __init__(self):
-        self.start_coordinates = [0, 4, 0]
-        self.artifact_dimensions = [5, 5, 5]
-        self.artifact_spacing = 2
-        self.admissible_rotations = [NORTH,
-                                     WEST,
-                                     SOUTH,
-                                     EAST,
-                                     UP,
-                                     DOWN]
-        self.admissible_blocks = [
-                                  ACACIA_DOOR,
-                                  ACACIA_FENCE,
-                                  ACACIA_STAIRS,
-                                  AIR,
-                                  BOOKSHELF,
-                                  CHEST,
-                                  COBBLESTONE_WALL,
-                                  DIRT,
-                                  GLASS_PANE,
-                                  GLOWSTONE,
-                                  GRAVEL
-                                  ]
+    def __init__(self,
+                 filename: str):
+        config = configparser.ConfigParser()
+        config.read(filename)
+        self.start_coordinates = [
+            config['START POSITION'].getint('x'),
+            config['START POSITION'].getint('y'),
+            config['START POSITION'].getint('z')
+        ]
+        self.artifact_dimensions = [
+            config['ARTIFACT'].getint('width'),
+            config['ARTIFACT'].getint('height'),
+            config['ARTIFACT'].getint('depth')
+        ]
+        self.artifact_spacing = config['ARTIFACT'].getint('spacing')
+        self.admissible_rotations = config['ADMISSIBILES'].get('rotations').replace(' ', '').upper().split(',')
+        self.admissible_blocks = config['ADMISSIBILES'].get('blocks').replace(' ', '').upper().split(',')
+
+        self.buffer_capacity = 40
 
     @property
     def x0(self):
@@ -66,17 +63,8 @@ class MCSettings:
                     val: float,
                     block: bool = True):
         l = self.admissible_blocks if block else self.admissible_rotations
-        return l[int(val * len(l)) - 1]  # assumes val <= 1
-
-    def save(self):
-        import json
-        with open('mc_settings.json', 'w') as f:
-            json.dump(self.__dict__, f)
-
-    def load(self):
-        import json
-        with open('mc_settings.json', 'r') as f:
-            self.__dict__ = json.load(f)
+        e = BlockType if block else Orientation
+        return e.Value(l[int(val * len(l)) - 1])  # assumes val <= 1
 
 
 class MCEvaluator:
@@ -204,8 +192,7 @@ class MCEvaluator:
             genome.fitness = 1. if i + 1 in fitnesses else 0.
 
 
-def run(n_generations: int,
-        settings: MCSettings):
+def run(n_generations: int):
     channel = grpc.insecure_channel('localhost:5001')
     client = minecraft_pb2_grpc.MinecraftServiceStub(channel)
 
@@ -218,10 +205,12 @@ def run(n_generations: int,
         config_path,
     )
 
+    mc_settings = MCSettings(filename=os.path.join(os.path.dirname(__file__), "experiment.cfg"))
+
     evaluator = MCEvaluator(
         client=client,
         pop_size=config.pop_size,
-        mc_settings=settings
+        mc_settings=mc_settings
     )
 
     def eval_genomes(genomes: Union[neat.DefaultGenome, List[neat.DefaultGenome]],
@@ -242,7 +231,4 @@ def run(n_generations: int,
 
 
 if __name__ == '__main__':
-    mc_settings = MCSettings()
-    mc_settings.save()
-    run(n_generations=10,
-        settings=mc_settings)
+    run(n_generations=10)
