@@ -13,4 +13,9 @@ ops.json
 usercache.json
 whitelist.json
 server.properties
+usernamecache.json
+neat.log
+mc_settings.json
 .DS_Store
+__pycache__/*
+pytorch_neat/__pycache__/*
