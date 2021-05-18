@@ -1,12 +1,16 @@
-from typing import Dict
+import os
+from typing import Dict, List
 
 import numpy as np
 import torch as th
 import torch.nn as nn
+import torch.optim as optim
 from torch.utils.data import Dataset
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+from datetime import datetime
 
-from main import MCSettings
-
+from settings import MCSettings
 
 DEVICE = "cuda" if th.cuda.is_available() else "cpu"
 
@@ -34,17 +38,31 @@ class ArtifactsBuffer:
     def __init__(self,
                  settings: MCSettings):
         self.capacity = settings.buffer_capacity
+        self.batch_size = settings.batch_size
         self.artifacts = []
         self.fitnesses = []
+
+    @property
+    def at_capacity(self):
+        return len(self.fitnesses) == self.capacity
 
     def add(self,
             artifact: np.ndarray,
             fitness: float) -> None:
+        # reorder artifact's axis
+        # artifact = np.expand_dims(a=artifact,
+        #                           axis=0)  # WxHxDxC to 1xWxHxDxC
+        # artifact = np.moveaxis(a=artifact,
+        #                        destination=0,
+        #                        source=4)  # 1xWxHxDxC to CxWxHxDx1
+        # artifact = artifact.squeeze()  # NxCxWxHxDx1 to NxCxWxHxD
+        # make space in buffer if needed
         if len(artifact) == self.capacity:
             n = np.random.randint(low=0,
                                   high=self.capacity)
             self.artifacts.pop(n)
             self.fitnesses.pop(n)
+        # add both artifact and fitness
         self.artifacts.append(artifact)
         self.fitnesses.append(fitness)
 
@@ -90,7 +108,7 @@ class ArtifactsBuffer:
                 for r in range(1, 4):
                     artifacts.append(np.rot90(m=artifacts[j],
                                               k=r,
-                                              axes=(0, 2)))
+                                              axes=(1, 3)))  # CxWxHxD, so rotate W and D around H
                     fitnesses.append(1.)
                     diff -= 1
                 if diff <= 0:
@@ -111,7 +129,8 @@ class ArtifactsBuffer:
         return self._prepare_dataloaders(
             xs=artifacts,
             ys=fitnesses,
-            batch_size=2)
+            batch_size=2
+        )
 
 
 class ConvolutionalBlock(nn.Module):
@@ -179,13 +198,162 @@ class FitnessEstimator(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_features=kwargs.get('n_features'),
-                      out_features=1),
-            nn.ReLU(),
-            nn.Softmax(dim=1)
+                      out_features=2),
+            nn.Sigmoid()
         ).to(DEVICE)
 
     def forward(self, x):
         return self.seq(x)
+
+
+class FitnessEstimatorWrapper:
+    def __init__(self,
+                 test_threshold: float,
+                 net_args):
+        self.net = FitnessEstimator(**net_args)
+        self.test_threshold = test_threshold
+        self.can_estimate = False
+        self.writer = SummaryWriter()
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(self.net.parameters(), lr=0.01)
+        self.epoch = 0
+        self.train_accuracy = 0.
+        self.train_loss = 0.
+        self.val_accuracy = 0.
+        self.val_loss = 0.
+
+    @staticmethod
+    def _binary_acc(predictions,
+                    labels):
+        logits = th.softmax(predictions, dim=1)
+        _, logits = th.max(logits, dim=1)
+        correct_results_sum = (logits == labels).sum().float()
+        acc = correct_results_sum / labels.shape[0]
+        return acc
+
+    def train(self,
+              dataloaders: Dict[str, th.utils.data.DataLoader],
+              epochs: int):
+        train_data = dataloaders.get('train')
+        train_bs = train_data.batch_size
+        test_data = dataloaders.get('test')
+        # training
+        train_loss = 0.
+        train_acc = 0.
+        for epoch in range(epochs):
+            self.net.train()
+            bar = tqdm(desc=f'Epoch {epoch + 1}',
+                       total=len(train_data))
+            for i, data in enumerate(train_data, 0):
+                inputs, labels = data
+                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                # forward + backward + optimize
+                outputs = self.net(inputs)
+                loss = self.criterion(outputs, labels)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                # update metrics and display
+                train_loss += loss.item()
+                train_acc += self._binary_acc(predictions=outputs.cpu().detach().numpy(),
+                                              labels=labels.cpu().numpy())
+                bar.set_postfix_str(
+                    s=f"Loss: {train_loss / train_bs}; Acc: {train_acc / train_bs}")
+                # log results at the end of training
+                if i == len(train_data) - 1:
+                    self.writer.add_scalar('Accuracy/train', train_acc, epoch)
+                    self.writer.add_scalar('Loss/train', train_loss, epoch)
+                    self.train_accuracy = train_acc
+                    self.train_loss = train_loss
+                train_loss = 0.
+                train_acc = 0.
+                bar.update(n=1)
+            bar.close()
+
+            # testing
+            correct = 0
+            test_loss = 0.
+            total = 0
+            with th.no_grad():
+                self.net.eval()
+                bar = tqdm(desc=f'Filter test',
+                           total=len(test_data))
+                for data in test_data:
+                    sample, labels = data
+                    sample, labels = sample.to(DEVICE), labels.to(DEVICE)
+                    outputs = self.net(sample)
+                    correct += self._binary_acc(predictions=outputs.cpu().detach().numpy(),
+                                                labels=labels.cpu().numpy())
+                    test_loss += self.criterion(outputs, labels)
+                    total += labels.size(0)
+                    bar.update(n=1)
+                bar.close()
+                self.writer.add_scalar('Accuracy/test', correct / total, epoch)
+                self.writer.add_scalar('Loss/test', test_loss, epoch)
+                self.val_accuracy = correct / total
+                self.val_loss = test_loss
+
+            self.epoch += 1
+
+            # check if the filter can be considered trained or not
+            self.can_estimate = self.test_threshold <= (correct / total)
+
+    def estimate(self,
+                 artifacts: List[np.ndarray]) -> th.Tensor:
+        """
+        Estimate the fitness for a batch of artifacts.
+
+        :param artifacts: List of N artifacts. Each artifact is a WxHxDxC NumPy array.
+        :return: The tensor containing the estimated fitness (values between 0 and 1)
+        """
+        with th.no_grad:
+            # artifacts = th.as_tensor(artifacts,
+            #                          dtype=th.double).unsqueeze(1)  # NxWxHxDxC to Nx1xWxHxDxC
+            # artifacts = th.moveaxis(input=artifacts,
+            #                         destination=1,
+            #                         source=5)  # Nx1xWxHxDxC to NxCxWxHxDx1
+            # artifacts = artifacts.squeeze()  # NxCxWxHxDx1 to NxCxWxHxD
+            artifacts = th.as_tensor(artifacts).float().to(DEVICE)
+            logits = th.softmax(self.net(artifacts), dim=1)
+            probabilities, logits = th.max(logits, dim=1)
+            return probabilities * logits
+
+    def save(self,
+             to_resume: bool,
+             where: str):
+        t = datetime.now()
+        name = t.strftime('%Y%m%d%H%M%S')
+        if to_resume:
+            th.save({
+                'epoch': self.epoch,
+                'train_loss': self.train_loss,
+                'train_accuracy': self.train_accuracy,
+                'val_loss': self.val_loss,
+                'val_accuracy': self.val_accuracy,
+                'estimator_dict': self.net.state_dict(),
+                'can_estimate': self.can_estimate,
+                'optimizer': self.optimizer.state_dict()
+            }, os.path.join(where, f'{name}.checkpoint'))
+        else:
+            th.save(self.net.state_dict(),
+                    os.path.join(where, f'{name}_estimator.pth'))
+
+    def load(self,
+             to_resume: bool,
+             where: str,
+             timestep: str):
+        if to_resume:
+            checkpoint = th.load(os.path.join(where, f'{timestep}.checkpoint'))
+            self.net.load_state_dict(checkpoint['estimator_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.epoch = checkpoint.get('epoch', 0)
+            self.can_estimate = checkpoint.get('can_estimate', False)
+            self.train_loss = checkpoint.get('train_loss', 0)
+            self.train_accuracy = checkpoint.get('train_accuracy', 0)
+            self.val_loss = checkpoint.get('val_loss', 0)
+            self.val_accuracy = checkpoint.get('val_accuracy', 0)
+        else:
+            self.net.load_state_dict(th.load(os.path.join(where, f'{timestep}_estimator.pth')))
 
 
 if __name__ == "__main__":
