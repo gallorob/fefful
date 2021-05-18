@@ -1,6 +1,7 @@
 import argparse
 import os
 from typing import Any, Tuple, Union, List, Dict
+from operator import itemgetter
 
 import neat
 import numpy as np
@@ -105,10 +106,12 @@ class MCEvaluator:
     def minimum_criterion(self,
                           artifacts: List[np.ndarray],
                           genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
-        idxs = list(range(self.pop_size))
-        promising_artifacts = [artifacts[i] for i in idxs]
-        promising_genomes = [genomes[i] for i in idxs]
-        return promising_artifacts, promising_genomes
+        promising = [i for i, artifact in enumerate(artifacts) if np.std(artifact[0,:,:,:]) > 0.2]
+        if len(promising) > self.pop_size:
+            print(f'minimum_criterion: too many survivors ({len(promising)}), decimating to {self.pop_size}')
+            promising = np.random.choice(promising, size=self.pop_size)
+        get_promising = itemgetter(*promising)
+        return get_promising(artifacts), get_promising(genomes)
 
     def _generate_artifacts(self,
                             genomes: List[neat.DefaultGenome],
@@ -162,7 +165,7 @@ class MCEvaluator:
         return blocks
 
     def eval_genomes(self,
-                     genomes: Union[neat.DefaultGenome, List[neat.DefaultGenome]],
+                     genomes: Union[neat.DefaultGenome, Tuple[int, List[neat.DefaultGenome]]],
                      config: neat.Config,
                      debug: bool = False) -> None:
         # used when evaluating best single genome instead of a population of genomes
@@ -182,7 +185,7 @@ class MCEvaluator:
                                                  config=config)
 
         promising_artifacts, promising_genomes = self.minimum_criterion(all_artifacts, genomes)
-        print(f'{len(promising_artifacts)} (out of {len(all_artifacts)}) artifacts passed the MC')
+        print(f'{len(promising_artifacts)} artifacts survived the MC')
 
         blocks = self._generate_blocks(artifacts=promising_artifacts)
 
@@ -190,6 +193,8 @@ class MCEvaluator:
         # spawn blocks on the MC world
         self.client.spawnBlocks(Blocks(blocks=blocks))
 
+        for _, genome in genomes:
+            genome.fitness = 0.
         if not self.fitness_estimator.can_estimate:
             # get user's input
             fitnesses = list(map(int, input('Enter interesting artifacts (csv): ').split(',')))
@@ -203,13 +208,13 @@ class MCEvaluator:
                 self.buffer.add(artifact=artifact,
                                 fitness=fitness)
             # assign fitness
-            for i, genome in promising_genomes:
+            for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = 1. if i + 1 in fitnesses else 0.
         else:
             # get network's estimates
             fitnesses = self.fitness_estimator.estimate(artifacts=promising_artifacts)
             # assign fitness
-            for i, genome in promising_genomes:
+            for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = fitnesses[i]
 
         # train estimator if possible

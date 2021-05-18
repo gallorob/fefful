@@ -1,6 +1,7 @@
 import configparser
 import os
 
+import numpy as np
 import torch as th
 from torch import sigmoid
 
@@ -68,4 +69,4 @@ class MCSettings:
                     block: bool = True):
         l = self.admissible_blocks if block else self.admissible_rotations
         e = BlockType if block else Orientation
-        return e.Value(l[int(sigmoid(th.as_tensor(val)).numpy() * len(l)) - 1])
+        return e.Value(l[int(np.round( val * (len(l)-1) ))])
