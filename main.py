@@ -102,8 +102,13 @@ class MCEvaluator:
             ])
         )
 
-    def minimum_criterion(self, artifact):
-        return True
+    def minimum_criterion(self,
+                          artifacts: List[np.ndarray],
+                          genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
+        idxs = list(range(self.pop_size))
+        promising_artifacts = [artifacts[i] for i in idxs]
+        promising_genomes = [genomes[i] for i in idxs]
+        return promising_artifacts, promising_genomes
 
     def _generate_artifacts(self,
                             genomes: List[neat.DefaultGenome],
@@ -176,15 +181,10 @@ class MCEvaluator:
         all_artifacts = self._generate_artifacts(genomes=genomes,
                                                  config=config)
 
-        # TODO: @andreafanti Perhaps a function that takes a list of artifacts as input and removes according to the
-        #  MC maybe would be better. You can also stop removing if you reach the displayable threshold (see settings)
-        # filter artifacts with the Minimum Criterion and spawn survivors in MC
-        decent_artifacts = [artifact for artifact in all_artifacts if self.minimum_criterion(artifact)]
-        print(f'{len(decent_artifacts)} artifacts survived the minimum criterion')
+        promising_artifacts, promising_genomes = self.minimum_criterion(all_artifacts, genomes)
+        print(f'{len(promising_artifacts)} (out of {len(all_artifacts)}) artifacts passed the MC')
 
-        promising_genomes = genomes  # will be changed by MC
-
-        blocks = self._generate_blocks(artifacts=decent_artifacts)
+        blocks = self._generate_blocks(artifacts=promising_artifacts)
 
         # User-based fitness assignment
         # spawn blocks on the MC world
@@ -199,7 +199,7 @@ class MCEvaluator:
             assert max(fitnesses) <= self.pop_size, f'Unexpected artifact number: {max(fitnesses)}'
             assert min(fitnesses) > 0, f'Unexpected artifact number: {min(fitnesses)}'
             # add artifacts and fitnesses to the buffer
-            for artifact, fitness in zip(decent_artifacts, fitnesses):
+            for artifact, fitness in zip(promising_artifacts, fitnesses):
                 self.buffer.add(artifact=artifact,
                                 fitness=fitness)
             # assign fitness
@@ -207,7 +207,7 @@ class MCEvaluator:
                 genome.fitness = 1. if i + 1 in fitnesses else 0.
         else:
             # get network's estimates
-            fitnesses = self.fitness_estimator.estimate(artifacts=decent_artifacts)
+            fitnesses = self.fitness_estimator.estimate(artifacts=promising_artifacts)
             # assign fitness
             for i, genome in promising_genomes:
                 genome.fitness = fitnesses[i]
