@@ -1,6 +1,7 @@
 import argparse
 import os
 from typing import Any, Tuple, Union, List, Dict
+from operator import itemgetter
 
 import neat
 import numpy as np
@@ -79,8 +80,18 @@ class MCEvaluator:
 
         self.client.spawnBlocks(Blocks(blocks=blocks))
 
-    def minimum_criterion(self, artifact):
-        return True
+    def minimum_criterion(self,
+                          artifacts: List[np.ndarray],
+                          genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
+        def is_promising(artifact):
+            return np.std(artifact[0,:,:,:]) > self.mc_settings.min_block_type_std \
+                   and np.std(artifact[1,:,:,:]) > self.mc_settings.min_block_rot_std
+        promising = [i for i, artifact in enumerate(artifacts) if is_promising(artifact)]
+        if len(promising) > self.pop_size:
+            print(f'minimum_criterion: too many survivors ({len(promising)}), decimating to {self.pop_size}')
+            promising = np.random.choice(promising, size=self.pop_size)
+        get_promising = itemgetter(*promising)
+        return get_promising(artifacts), get_promising(genomes)
 
     def _generate_artifacts(self,
                             genomes: List[neat.DefaultGenome],
@@ -134,7 +145,7 @@ class MCEvaluator:
         return blocks
 
     def eval_genomes(self,
-                     genomes: Union[neat.DefaultGenome, List[neat.DefaultGenome]],
+                     genomes: Union[neat.DefaultGenome, Tuple[int, List[neat.DefaultGenome]]],
                      config: neat.Config,
                      debug: bool = False) -> None:
         # used when evaluating best single genome instead of a population of genomes
@@ -153,20 +164,17 @@ class MCEvaluator:
         all_artifacts = self._generate_artifacts(genomes=genomes,
                                                  config=config)
 
-        # TODO: @andreafanti Perhaps a function that takes a list of artifacts as input and removes according to the
-        #  MC maybe would be better. You can also stop removing if you reach the displayable threshold (see settings)
-        # filter artifacts with the Minimum Criterion and spawn survivors in MC
-        decent_artifacts = [artifact for artifact in all_artifacts if self.minimum_criterion(artifact)]
-        print(f'{len(decent_artifacts)} artifacts survived the minimum criterion')
+        promising_artifacts, promising_genomes = self.minimum_criterion(all_artifacts, genomes)
+        print(f'{len(promising_artifacts)} artifacts survived the MC')
 
-        promising_genomes = genomes  # will be changed by MC
-
-        blocks = self._generate_blocks(artifacts=decent_artifacts)
+        blocks = self._generate_blocks(artifacts=promising_artifacts)
 
         # User-based fitness assignment
         # spawn blocks on the MC world
         self.client.spawnBlocks(Blocks(blocks=blocks))
 
+        for _, genome in genomes:
+            genome.fitness = 0.
         if not self.fitness_estimator.can_estimate:
             # get user's input
             fitnesses = list(map(int, input('Enter interesting artifacts (csv): ').split(',')))
@@ -176,17 +184,17 @@ class MCEvaluator:
             assert max(fitnesses) <= self.pop_size, f'Unexpected artifact number: {max(fitnesses)}'
             assert min(fitnesses) > 0, f'Unexpected artifact number: {min(fitnesses)}'
             # add artifacts and fitnesses to the buffer
-            for artifact, fitness in zip(decent_artifacts, fitnesses):
+            for artifact, fitness in zip(promising_artifacts, fitnesses):
                 self.buffer.add(artifact=artifact,
                                 fitness=fitness)
             # assign fitness
-            for i, genome in promising_genomes:
+            for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = 1. if i + 1 in fitnesses else 0.
         else:
             # get network's estimates
-            fitnesses = self.fitness_estimator.estimate(artifacts=decent_artifacts)
+            fitnesses = self.fitness_estimator.estimate(artifacts=promising_artifacts)
             # assign fitness
-            for i, genome in promising_genomes:
+            for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = fitnesses[i]
 
         # train estimator if possible
