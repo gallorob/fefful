@@ -106,7 +106,10 @@ class MCEvaluator:
     def minimum_criterion(self,
                           artifacts: List[np.ndarray],
                           genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
-        promising = [i for i, artifact in enumerate(artifacts) if np.std(artifact[0,:,:,:]) > 0.2]
+        def is_promising(artifact):
+            return np.std(artifact[0,:,:,:]) > self.mc_settings.min_block_type_std \
+                   and np.std(artifact[1,:,:,:]) > self.mc_settings.min_block_rot_std
+        promising = [i for i, artifact in enumerate(artifacts) if is_promising(artifact)]
         if len(promising) > self.pop_size:
             print(f'minimum_criterion: too many survivors ({len(promising)}), decimating to {self.pop_size}')
             promising = np.random.choice(promising, size=self.pop_size)

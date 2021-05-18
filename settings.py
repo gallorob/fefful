@@ -26,6 +26,8 @@ class MCSettings:
         ]
         self.artifact_spacing = config['ARTIFACT'].getint('spacing')
         self.evaluatable_artifacts = config['ARTIFACT'].getint('evaluatable_artifacts')
+        self.min_block_type_std = config['ARTIFACT'].getfloat('min_block_type_std')
+        self.min_block_rot_std = config['ARTIFACT'].getfloat('min_block_rot_std')
 
         self.admissible_rotations = config['ADMISSIBILES'].get('rotations').replace(' ', '').upper().split(',')
         self.admissible_blocks = config['ADMISSIBILES'].get('blocks').replace(' ', '').upper().split(',')
@@ -36,7 +38,7 @@ class MCSettings:
         self.train_epochs = config['ESTIMATOR'].getint('train_epochs')
         self.train_interval = config['ESTIMATOR'].getint('train_interval')
         self.test_threshold = config['ESTIMATOR'].getfloat('test_threshold')
-
+        
         self.nets_folder = os.path.join(os.path.dirname(__file__), config['ESTIMATOR'].get('nets_folder'))
         os.makedirs(self.nets_folder, exist_ok=True)
 
