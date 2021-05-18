@@ -239,8 +239,6 @@ def run(n_generations: int,
 
     pop.run(eval_genomes, n_generations)
 
-    # saving? resuming? Perhaps pickle?
-
     evaluator.fitness_estimator.save(to_resume=False,
                                      where=mc_settings.nets_folder)
 
@@ -258,8 +256,6 @@ if __name__ == '__main__':
     parser.set_defaults(to_resume=False)
 
     args = parser.parse_args()
-
-    # TODO: @andreafanti set seed here from args
 
     run(n_generations=args.n_generations,
         additional_args={

@@ -49,13 +49,6 @@ class ArtifactsBuffer:
     def add(self,
             artifact: np.ndarray,
             fitness: float) -> None:
-        # reorder artifact's axis
-        # artifact = np.expand_dims(a=artifact,
-        #                           axis=0)  # WxHxDxC to 1xWxHxDxC
-        # artifact = np.moveaxis(a=artifact,
-        #                        destination=0,
-        #                        source=4)  # 1xWxHxDxC to CxWxHxDx1
-        # artifact = artifact.squeeze()  # NxCxWxHxDx1 to NxCxWxHxD
         # make space in buffer if needed
         if len(artifact) == self.capacity:
             n = np.random.randint(low=0,
@@ -307,12 +300,6 @@ class FitnessEstimatorWrapper:
         :return: The tensor containing the estimated fitness (values between 0 and 1)
         """
         with th.no_grad:
-            # artifacts = th.as_tensor(artifacts,
-            #                          dtype=th.double).unsqueeze(1)  # NxWxHxDxC to Nx1xWxHxDxC
-            # artifacts = th.moveaxis(input=artifacts,
-            #                         destination=1,
-            #                         source=5)  # Nx1xWxHxDxC to NxCxWxHxDx1
-            # artifacts = artifacts.squeeze()  # NxCxWxHxDx1 to NxCxWxHxD
             artifacts = th.as_tensor(artifacts).float().to(DEVICE)
             logits = th.softmax(self.net(artifacts), dim=1)
             probabilities, logits = th.max(logits, dim=1)
