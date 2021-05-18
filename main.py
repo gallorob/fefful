@@ -66,41 +66,18 @@ class MCEvaluator:
             type=AIR
         ))
 
-        # spawn arrow on the ground to show direction of artifacts are spawned in
-        self.client.spawnBlocks(
-            Blocks(blocks=[
-                Block(position=Point(x=self.mc_settings.x0 - 5,
-                                     y=self.mc_settings.y0 + 1,
-                                     z=self.mc_settings.z0 - 4),
-                      type=COBBLESTONE,
-                      orientation=NORTH),
-                Block(position=Point(x=self.mc_settings.x0 - 4,
-                                     y=self.mc_settings.y0 + 1,
-                                     z=self.mc_settings.z0 - 4),
-                      type=COBBLESTONE,
-                      orientation=NORTH),
-                Block(position=Point(x=self.mc_settings.x0 - 3,
-                                     y=self.mc_settings.y0 + 1,
-                                     z=self.mc_settings.z0 - 4),
-                      type=COBBLESTONE,
-                      orientation=NORTH),
-                Block(position=Point(x=self.mc_settings.x0 - 2,
-                                     y=self.mc_settings.y0 + 1,
-                                     z=self.mc_settings.z0 - 4),
-                      type=COBBLESTONE,
-                      orientation=NORTH),
-                Block(position=Point(x=self.mc_settings.x0 - 3,
-                                     y=self.mc_settings.y0,
-                                     z=self.mc_settings.z0 - 4),
-                      type=COBBLESTONE,
-                      orientation=NORTH),
-                Block(position=Point(x=self.mc_settings.x0 - 3,
-                                     y=self.mc_settings.y0 + 2,
-                                     z=self.mc_settings.z0 - 4),
-                      type=COBBLESTONE,
-                      orientation=NORTH)
-            ])
-        )
+    def place_signs(self):
+        blocks = []
+        for i in range(self.pop_size):
+            blocks.append(Block(
+                position=Point(x=self.mc_settings.x0 + (i * (self.mc_settings.artifact_width + self.mc_settings.artifact_spacing)),
+                               y=self.mc_settings.y0,
+                               z=self.mc_settings.z0 - 3),
+                type=STANDING_SIGN,
+                orientation=NORTH
+            ))
+
+        self.client.spawnBlocks(Blocks(blocks=blocks))
 
     def minimum_criterion(self, artifact):
         return True
@@ -245,6 +222,8 @@ def run(n_generations: int,
         mc_settings=mc_settings,
         additional_args=additional_args
     )
+
+    evaluator.place_signs()
 
     def eval_genomes(genomes: Union[neat.DefaultGenome, List[neat.DefaultGenome]],
                      config: neat.Config) -> None:
