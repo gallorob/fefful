@@ -11,6 +11,7 @@ from google.auth.transport import grpc
 
 import minecraft_pb2_grpc
 from fitness_estimator import ArtifactsBuffer, FitnessEstimatorWrapper
+from history_manager import HistoryManager
 from minecraft_pb2 import *
 from minecraft_pb2_grpc import *
 from pytorch_neat.cppn import create_cppn, Node
@@ -43,6 +44,12 @@ class MCEvaluator:
                                         timestep=additional_args.get('timestep'))
 
         self.iterations_counter = 0
+
+        self.history_manager = HistoryManager(mc_settings.history_folder)
+        if additional_args.get('history') is not None:
+            self.history_manager.load(filename=additional_args.get('history'))
+
+        self.generations_counter = 0
 
     @staticmethod
     def make_net(genome: neat.DefaultGenome,
@@ -176,7 +183,16 @@ class MCEvaluator:
 
         for _, genome in genomes:
             genome.fitness = 0.
-        if not self.fitness_estimator.can_estimate:
+        # if possible, assign automatically previously applied choices or fitnesses
+        if self.history_manager.has_choices(generation=self.generations_counter):
+            human, fitnesses = self.history_manager.get_choices(generation=self.generations_counter)
+            for i, (_, genome) in enumerate(promising_genomes):
+                if not human:
+                    genome.fitness = fitnesses[i]
+                else:
+                    genome.fitness = 1. if i + 1 in fitnesses else 0.
+
+        elif not self.fitness_estimator.can_estimate:
             # get user's input
             fitnesses = list(map(int, input('Enter interesting artifacts (csv): ').split(',')))
             # sanity checks
@@ -188,12 +204,19 @@ class MCEvaluator:
             for i, artifact in enumerate(promising_artifacts):
                 self.buffer.add(artifact=artifact,
                                 fitness=1. if i + 1 in fitnesses else 0.)
+            # save choices in history
+            self.history_manager.add_choices(generation=self.generations_counter,
+                                             choices=fitnesses)
             # assign fitness
             for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = 1. if i + 1 in fitnesses else 0.
         else:
             # get network's estimates
             fitnesses = self.fitness_estimator.estimate(artifacts=promising_artifacts)
+            # save fitness in history
+            self.history_manager.add_choices(generation=self.generations_counter,
+                                             choices=fitnesses.tolist(),
+                                             human=False)
             # assign fitness
             for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = fitnesses[i]
@@ -208,6 +231,8 @@ class MCEvaluator:
                                             where=self.mc_settings.nets_folder)
             else:
                 self.iterations_counter += 1
+
+        self.generations_counter += 1
 
 
 def run(n_generations: int,
@@ -250,6 +275,7 @@ def run(n_generations: int,
 
     evaluator.fitness_estimator.save(to_resume=False,
                                      where=mc_settings.nets_folder)
+    evaluator.history_manager.save()
 
 
 if __name__ == '__main__':
@@ -258,8 +284,10 @@ if __name__ == '__main__':
                         help='RNG seed for reproducibility (default: 123456)')
     parser.add_argument('--n', type=int, dest='n_generations', default=10,
                         help='Number of generations to run the evolution for (default: 10)')
+    parser.add_argument('--history', type=str, dest='history', default=None,
+                        help='Optional; Name of history file of past choices / fitnesses')
     parser.add_argument('--net', type=str, dest='net_name', default=None,
-                        help='Optional; Fitness Estimator network timestep')
+                        help='Optional; Name of Fitness Estimator network')
     parser.add_argument('--resume', dest='to_resume', action='store_true')
     parser.add_argument('--from_scratch', dest='to_resume', action='store_false')
     parser.set_defaults(to_resume=False)
@@ -274,5 +302,6 @@ if __name__ == '__main__':
     run(n_generations=args.n_generations,
         additional_args={
             'to_resume': args.to_resume,
-            'timestep': args.net_name
+            'timestep': args.net_name,
+            'history': args.history
         })

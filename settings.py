@@ -41,6 +41,8 @@ class MCSettings:
         
         self.nets_folder = os.path.join(os.path.dirname(__file__), config['ESTIMATOR'].get('nets_folder'))
         os.makedirs(self.nets_folder, exist_ok=True)
+        self.history_folder = os.path.join(os.path.dirname(__file__), config['ESTIMATOR'].get('history_folder'))
+        os.makedirs(self.history_folder, exist_ok=True)
 
     @property
     def x0(self):
