@@ -185,9 +185,9 @@ class MCEvaluator:
             assert max(fitnesses) <= self.pop_size, f'Unexpected artifact number: {max(fitnesses)}'
             assert min(fitnesses) > 0, f'Unexpected artifact number: {min(fitnesses)}'
             # add artifacts and fitnesses to the buffer
-            for artifact, fitness in zip(promising_artifacts, fitnesses):
+            for i, artifact in enumerate(promising_artifacts):
                 self.buffer.add(artifact=artifact,
-                                fitness=fitness)
+                                fitness=1. if i + 1 in fitnesses else 0.)
             # assign fitness
             for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = 1. if i + 1 in fitnesses else 0.

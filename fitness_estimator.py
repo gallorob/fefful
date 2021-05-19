@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List
+from operator import itemgetter
 
 import numpy as np
 import torch as th
@@ -50,7 +51,8 @@ class ArtifactsBuffer:
             artifact: np.ndarray,
             fitness: float) -> None:
         # make space in buffer if needed
-        if len(artifact) == self.capacity:
+        if self.at_capacity:
+            # TODO maybe only pop unbalancing examples?
             n = np.random.randint(low=0,
                                   high=self.capacity)
             self.artifacts.pop(n)
@@ -96,10 +98,10 @@ class ArtifactsBuffer:
             artifacts = []
             fitnesses = []
             # oversampling filtered in artifacts by rotation around Y
-            high_performing_idxs = np.where(np.asarray(fitnesses) == 1.)
-            for j in high_performing_idxs[0]:
+            high_performing_idxs = np.where(np.asarray(self.fitnesses) == 1.)[0]
+            for j in high_performing_idxs:
                 for r in range(1, 4):
-                    artifacts.append(np.rot90(m=artifacts[j],
+                    artifacts.append(np.rot90(m=self.artifacts[j],
                                               k=r,
                                               axes=(1, 3)))  # CxWxHxD, so rotate W and D around H
                     fitnesses.append(1.)
@@ -108,14 +110,18 @@ class ArtifactsBuffer:
                     break
             # undersampling if the dataset would still be unbalanced
             if diff > 0:
-                removable_idxs = np.where(np.asarray(fitnesses) == 0)
-                keep_idxs = np.append(high_performing_idxs[0],
-                                      removable_idxs[0][0:len(removable_idxs[0]) - int(diff) + 1])
-                artifacts = artifacts[keep_idxs]
-                fitnesses = fitnesses[keep_idxs]
+                removable_idxs = np.where(np.asarray(self.fitnesses) == 0.)[0]
+                keep_idxs = np.append(high_performing_idxs,
+                                      removable_idxs[0:len(removable_idxs) - int(diff) + 1])
+                get_keepers = itemgetter(*keep_idxs)
+                artifacts = get_keepers(self.artifacts)
+                fitnesses = get_keepers(self.fitnesses)
         else:
+            # TODO what if the data is unbalanced towards positive examples?
             artifacts = self.artifacts
             fitnesses = self.fitnesses
+        # TODO is simply 'int' ok here instead of the lambda? this is just to be 100% sure
+        fitnesses = list(map(lambda x: 1 if x == 1. else 0, fitnesses))
         artifacts = th.as_tensor(artifacts)
         fitnesses = th.as_tensor(fitnesses)
         # pass to dataset builder, return dataloaders
@@ -220,7 +226,7 @@ class FitnessEstimatorWrapper:
                     labels):
         logits = th.softmax(predictions, dim=1)
         _, logits = th.max(logits, dim=1)
-        correct_results_sum = (logits == labels).sum().float()
+        correct_results_sum = (output == labels).float().sum()
         acc = correct_results_sum / labels.shape[0]
         return acc
 
@@ -239,7 +245,7 @@ class FitnessEstimatorWrapper:
                        total=len(train_data))
             for i, data in enumerate(train_data, 0):
                 inputs, labels = data
-                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                inputs, labels = inputs.float().to(DEVICE), labels.to(DEVICE)
                 # forward + backward + optimize
                 outputs = self.net(inputs)
                 loss = self.criterion(outputs, labels)
@@ -248,8 +254,8 @@ class FitnessEstimatorWrapper:
                 self.optimizer.step()
                 # update metrics and display
                 train_loss += loss.item()
-                train_acc += self._binary_acc(predictions=outputs.cpu().detach().numpy(),
-                                              labels=labels.cpu().numpy())
+                train_acc += self._binary_acc(predictions=outputs.cpu().detach(),
+                                              labels=labels.cpu())
                 bar.set_postfix_str(
                     s=f"Loss: {train_loss / train_bs}; Acc: {train_acc / train_bs}")
                 # log results at the end of training
@@ -273,10 +279,10 @@ class FitnessEstimatorWrapper:
                            total=len(test_data))
                 for data in test_data:
                     sample, labels = data
-                    sample, labels = sample.to(DEVICE), labels.to(DEVICE)
+                    sample, labels = sample.float().to(DEVICE), labels.to(DEVICE)
                     outputs = self.net(sample)
-                    correct += self._binary_acc(predictions=outputs.cpu().detach().numpy(),
-                                                labels=labels.cpu().numpy())
+                    correct += self._binary_acc(predictions=outputs.cpu().detach(),
+                                                labels=labels.cpu())
                     test_loss += self.criterion(outputs, labels)
                     total += labels.size(0)
                     bar.update(n=1)
