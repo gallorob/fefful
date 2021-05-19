@@ -2,6 +2,7 @@ import argparse
 import os
 from typing import Any, Tuple, Union, List, Dict
 from operator import itemgetter
+import random
 
 import neat
 import numpy as np
