@@ -265,6 +265,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    th.manual_seed(args.random_seed)
+    random.seed(args.random_seed)
+    # TODO is this needed?
+    np.random.seed(args.random_seed)
+
     run(n_generations=args.n_generations,
         additional_args={
             'to_resume': args.to_resume,
