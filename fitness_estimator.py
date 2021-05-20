@@ -81,10 +81,10 @@ class ArtifactsBuffer:
                                                                  lengths=[train_size, test_size],
                                                                  generator=th.Generator())
         train_dataset_loader = th.utils.data.DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=True
         )
         test_dataset_loader = th.utils.data.DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=True
+            test_dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False
         )
         return {
             "train": train_dataset_loader,
@@ -108,14 +108,16 @@ class ArtifactsBuffer:
                     diff -= 1
                 if diff <= 0:
                     break
+            artifacts.extend(self.artifacts)
+            fitnesses.extend(self.fitnesses)
             # undersampling if the dataset would still be unbalanced
             if diff > 0:
-                removable_idxs = np.where(np.asarray(self.fitnesses) == 0.)[0]
+                removable_idxs = np.where(np.asarray(fitnesses) == 0.)[0]
                 keep_idxs = np.append(high_performing_idxs,
                                       removable_idxs[0:len(removable_idxs) - int(diff) + 1])
                 get_keepers = itemgetter(*keep_idxs)
-                artifacts = get_keepers(self.artifacts)
-                fitnesses = get_keepers(self.fitnesses)
+                artifacts = get_keepers(artifacts)
+                fitnesses = get_keepers(fitnesses)
         else:
             # TODO what if the data is unbalanced towards positive examples?
             artifacts = self.artifacts
