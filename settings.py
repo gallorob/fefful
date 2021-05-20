@@ -28,6 +28,7 @@ class MCSettings:
         self.evaluatable_artifacts = config['ARTIFACT'].getint('evaluatable_artifacts')
         self.min_block_type_std = config['ARTIFACT'].getfloat('min_block_type_std')
         self.min_block_rot_std = config['ARTIFACT'].getfloat('min_block_rot_std')
+        self.min_air_fraction = config['ARTIFACT'].getfloat('min_air_fraction')
 
         self.admissible_rotations = config['ADMISSIBILES'].get('rotations').replace(' ', '').upper().split(',')
         self.admissible_blocks = config['ADMISSIBILES'].get('blocks').replace(' ', '').upper().split(',')
