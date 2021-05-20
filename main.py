@@ -79,21 +79,23 @@ class MCEvaluator:
         blocks = []
         for i in range(self.pop_size):
             blocks.append(Block(
-                position=Point(x=self.mc_settings.x0 + (i * (self.mc_settings.artifact_width + self.mc_settings.artifact_spacing)),
-                               y=self.mc_settings.y0,
-                               z=self.mc_settings.z0 - 3),
+                position=Point(
+                    x=self.mc_settings.x0 + (i * (self.mc_settings.artifact_width + self.mc_settings.artifact_spacing)),
+                    y=self.mc_settings.y0,
+                    z=self.mc_settings.z0 - 3),
                 type=STANDING_SIGN,
                 orientation=NORTH
             ))
 
         self.client.spawnBlocks(Blocks(blocks=blocks))
 
-    def minimum_criterion(self,
-                          artifacts: List[np.ndarray],
-                          genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
+    def _minimum_criterion(self,
+                           artifacts: List[np.ndarray],
+                           genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
         def is_promising(artifact):
-            return np.std(artifact[0,:,:,:]) > self.mc_settings.min_block_type_std \
-                   and np.std(artifact[1,:,:,:]) > self.mc_settings.min_block_rot_std
+            return np.std(artifact[0, :, :, :]) > self.mc_settings.min_block_type_std and np.std(
+                artifact[1, :, :, :]) > self.mc_settings.min_block_rot_std
+
         promising = [i for i, artifact in enumerate(artifacts) if is_promising(artifact)]
         if len(promising) > self.pop_size:
             print(f'minimum_criterion: too many survivors ({len(promising)}), decimating to {self.pop_size}')
@@ -172,7 +174,7 @@ class MCEvaluator:
         all_artifacts = self._generate_artifacts(genomes=genomes,
                                                  config=config)
 
-        promising_artifacts, promising_genomes = self.minimum_criterion(all_artifacts, genomes)
+        promising_artifacts, promising_genomes = self._minimum_criterion(all_artifacts, genomes)
         print(f'{len(promising_artifacts)} artifacts survived the MC')
 
         blocks = self._generate_blocks(artifacts=promising_artifacts)

@@ -38,7 +38,7 @@ class MCSettings:
         self.train_epochs = config['ESTIMATOR'].getint('train_epochs')
         self.train_interval = config['ESTIMATOR'].getint('train_interval')
         self.test_threshold = config['ESTIMATOR'].getfloat('test_threshold')
-        
+
         self.nets_folder = os.path.join(os.path.dirname(__file__), config['ESTIMATOR'].get('nets_folder'))
         os.makedirs(self.nets_folder, exist_ok=True)
         self.history_folder = os.path.join(os.path.dirname(__file__), config['ESTIMATOR'].get('history_folder'))
@@ -73,4 +73,4 @@ class MCSettings:
                     block: bool = True):
         l = self.admissible_blocks if block else self.admissible_rotations
         e = BlockType if block else Orientation
-        return e.Value(l[int(np.round( val * (len(l)-1) ))])
+        return e.Value(l[int(np.round(val * (len(l) - 1)))])
