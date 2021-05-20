@@ -226,7 +226,7 @@ class FitnessEstimatorWrapper:
                     labels):
         logits = th.softmax(predictions, dim=1)
         _, logits = th.max(logits, dim=1)
-        correct_results_sum = (output == labels).float().sum()
+        correct_results_sum = (logits == labels).float().sum()
         acc = correct_results_sum / labels.shape[0]
         return acc
 
