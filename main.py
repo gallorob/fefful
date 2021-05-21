@@ -93,14 +93,15 @@ class MCEvaluator:
                            artifacts: List[np.ndarray],
                            genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
         def is_promising(artifact):
-            return (0. <= artifact[0,:,:,:]).all() and np.std(
+            return (0. <= artifact[0, :, :, :]).all() and np.std(
                 artifact[0, :, :, :]) > self.mc_settings.min_block_type_std and np.std(
-                artifact[1, :, :, :]) > self.mc_settings.min_block_rot_std and \
-                (artifact[0,:,:,:] <= 1./len(self.mc_settings.admissible_blocks)).sum() > self.mc_settings.min_air_fraction*np.prod(artifact.shape[1:])
+                artifact[1, :, :, :]) > self.mc_settings.min_block_rot_std and (artifact[0, :, :, :] <= 1. / len(
+                self.mc_settings.admissible_blocks)).sum() > self.mc_settings.min_air_fraction * np.prod(
+                artifact.shape[1:])
 
         promising = [i for i, artifact in enumerate(artifacts) if is_promising(artifact)]
         if len(promising) > self.pop_size:
-            print(f'minimum_criterion: too many survivors ({len(promising)}), decimating to {self.pop_size}')
+            print(f'minimum_criterion: too many survivors ({len(promising)}), reducing to {self.pop_size}')
             promising = np.random.choice(promising, size=self.pop_size)
         get_promising = itemgetter(*promising)
         return get_promising(artifacts), get_promising(genomes)
@@ -162,7 +163,7 @@ class MCEvaluator:
                      debug: bool = False) -> None:
         # used when evaluating best single genome instead of a population of genomes
         if type(genomes) is neat.DefaultGenome:
-            print(f"Called `eval_genomes` with single genome; {'expected' if debug else 'unexpected'}.")
+            genomes.fitness = 1.
             return
 
         # check if we can use the estimator according to number of generations
@@ -186,7 +187,8 @@ class MCEvaluator:
         self.client.spawnBlocks(Blocks(blocks=blocks))
 
         for _, genome in genomes:
-            genome.fitness = 0.
+            if genome.fitness is None:
+                genome.fitness = 0.
         # if possible, assign automatically previously applied choices or fitnesses
         if self.history_manager.has_choices(generation=self.generations_counter):
             human, fitnesses = self.history_manager.get_choices(generation=self.generations_counter)
