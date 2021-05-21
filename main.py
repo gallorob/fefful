@@ -92,12 +92,13 @@ class MCEvaluator:
     def _minimum_criterion(self,
                            artifacts: List[np.ndarray],
                            genomes: List[neat.DefaultGenome]) -> Tuple[List[np.ndarray], List[neat.DefaultGenome]]:
+        def air_fraction(artifact):
+            return (artifact[0, :, :, :] <= 1. / len(self.mc_settings.admissible_blocks)).sum() / np.prod(artifact.shape[1:])
+        def solid_fraction(artifact):
+            return (artifact[0, :, :, :] > 1. / len(self.mc_settings.admissible_blocks)).sum() / np.prod(artifact.shape[1:])
         def is_promising(artifact):
-            return (0. <= artifact[0, :, :, :]).all() and np.std(
-                artifact[0, :, :, :]) > self.mc_settings.min_block_type_std and np.std(
-                artifact[1, :, :, :]) > self.mc_settings.min_block_rot_std and (artifact[0, :, :, :] <= 1. / len(
-                self.mc_settings.admissible_blocks)).sum() > self.mc_settings.min_air_fraction * np.prod(
-                artifact.shape[1:])
+            return air_fraction(artifact) >= self.mc_settings.min_air_fraction \
+                   and solid_fraction(artifact) >= self.mc_settings.min_solid_fraction
 
         promising = [i for i, artifact in enumerate(artifacts) if is_promising(artifact)]
         if len(promising) > self.pop_size:
