@@ -82,7 +82,7 @@ class MCEvaluator:
                 position=Point(
                     x=self.mc_settings.x0 + (i * (self.mc_settings.artifact_width + self.mc_settings.artifact_spacing)),
                     y=self.mc_settings.y0,
-                    z=self.mc_settings.z0 - 3),
+                    z=self.mc_settings.z0 + self.mc_settings.artifact_depth + 3),
                 type=STANDING_SIGN,
                 orientation=NORTH
             ))
@@ -167,7 +167,7 @@ class MCEvaluator:
             return
 
         # check if we can use the estimator according to number of generations
-        if self.iterations_counter % self.mc_settings.train_interval == 0:
+        if self.iterations_counter != 0 and self.iterations_counter % self.mc_settings.train_interval == 0:
             self.fitness_estimator.can_estimate = False
 
         # clear user area
