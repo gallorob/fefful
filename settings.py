@@ -25,7 +25,7 @@ class MCSettings:
             config['ARTIFACT'].getint('depth')
         ]
         self.artifact_spacing = config['ARTIFACT'].getint('spacing')
-        self.evaluatable_artifacts = config['ARTIFACT'].getint('evaluatable_artifacts')
+        self.evaluable_artifacts = config['ARTIFACT'].getint('evaluable_artifacts')
         self.min_block_type_std = config['ARTIFACT'].getfloat('min_block_type_std')
         self.min_block_rot_std = config['ARTIFACT'].getfloat('min_block_rot_std')
         self.min_air_fraction = config['ARTIFACT'].getfloat('min_air_fraction')

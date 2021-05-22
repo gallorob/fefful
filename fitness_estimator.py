@@ -43,6 +43,11 @@ class ArtifactsBuffer:
         self.artifacts = []
         self.fitnesses = []
 
+        # testing
+        for _ in range(self.capacity):
+            self.artifacts.append(np.random.random(size=(2,5,7,5)))
+            self.fitnesses.append(np.random.randint(low=0, high=2))
+
     @property
     def at_capacity(self):
         return len(self.fitnesses) == self.capacity
@@ -197,8 +202,7 @@ class FitnessEstimator(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_features=kwargs.get('n_features'),
-                      out_features=2),
-            nn.Sigmoid()
+                      out_features=2)
         ).to(DEVICE)
 
     def forward(self, x):
@@ -214,7 +218,7 @@ class FitnessEstimatorWrapper:
         self.can_estimate = False
         self.writer = SummaryWriter()
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.net.parameters(), lr=0.01)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=0.001)
         self.epoch = 0
         self.train_accuracy = 0.
         self.train_loss = 0.

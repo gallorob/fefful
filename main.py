@@ -25,7 +25,7 @@ class MCEvaluator:
                  mc_settings: MCSettings,
                  additional_args: Dict[str, Any]):
         self.client = client
-        self.pop_size = mc_settings.evaluatable_artifacts
+        self.pop_size = mc_settings.evaluable_artifacts
         self.mc_settings = mc_settings
         self.buffer = ArtifactsBuffer(settings=mc_settings)
         self.fitness_estimator = FitnessEstimatorWrapper(
