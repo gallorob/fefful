@@ -122,15 +122,13 @@ class ArtifactsBuffer:
             # TODO what if the data is unbalanced towards positive examples?
             artifacts = self.artifacts
             fitnesses = self.fitnesses
-        # TODO is simply 'int' ok here instead of the lambda? this is just to be 100% sure
-        fitnesses = list(map(lambda x: 1 if x == 1. else 0, fitnesses))
         artifacts = th.as_tensor(artifacts)
-        fitnesses = th.as_tensor(fitnesses)
+        fitnesses = th.as_tensor(fitnesses, dtype=th.long)
         # pass to dataset builder, return dataloaders
         return self._prepare_dataloaders(
             xs=artifacts,
             ys=fitnesses,
-            batch_size=2
+            batch_size=self.batch_size
         )
 
 
@@ -248,10 +246,10 @@ class FitnessEstimatorWrapper:
             for i, data in enumerate(train_data, 0):
                 inputs, labels = data
                 inputs, labels = inputs.float().to(DEVICE), labels.to(DEVICE)
+                self.optimizer.zero_grad()
                 # forward + backward + optimize
                 outputs = self.net(inputs)
                 loss = self.criterion(outputs, labels)
-                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
                 # update metrics and display
@@ -288,6 +286,8 @@ class FitnessEstimatorWrapper:
                     test_loss += self.criterion(outputs, labels)
                     total += labels.size(0)
                     bar.update(n=1)
+                bar.set_postfix_str(
+                    s=f"Loss: {test_loss}; Acc: {correct / total}")
                 bar.close()
                 self.writer.add_scalar('Accuracy/test', correct / total, epoch)
                 self.writer.add_scalar('Loss/test', test_loss, epoch)
