@@ -89,7 +89,7 @@ class ArtifactsBuffer:
             train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=True
         )
         test_dataset_loader = th.utils.data.DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False
+            test_dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=True
         )
         return {
             "train": train_dataset_loader,
@@ -281,7 +281,7 @@ class FitnessEstimatorWrapper:
                 self.net.eval()
                 bar = tqdm(desc=f'Filter test',
                            total=len(test_data))
-                for data in test_data:
+                for j, data in enumerate(test_data):
                     sample, labels = data
                     sample, labels = sample.float().to(DEVICE), labels.to(DEVICE)
                     outputs = self.net(sample)
@@ -289,6 +289,8 @@ class FitnessEstimatorWrapper:
                                                 labels=labels.cpu())
                     test_loss += self.criterion(outputs, labels)
                     total += labels.size(0)
+                    bar.set_postfix_str(
+                        s=f"Loss: {test_loss / total}; Acc: {correct / total}")
                     bar.update(n=1)
                 bar.set_postfix_str(
                     s=f"Loss: {test_loss}; Acc: {correct / total}")
@@ -300,8 +302,8 @@ class FitnessEstimatorWrapper:
 
             self.epoch += 1
 
-            # check if the filter can be considered trained or not
-            self.can_estimate = self.test_threshold <= (correct / total)
+        # check if the filter can be considered trained or not
+        self.can_estimate = bool(self.test_threshold <= self.val_accuracy)
 
     def estimate(self,
                  artifacts: List[np.ndarray]) -> th.Tensor:
@@ -311,7 +313,7 @@ class FitnessEstimatorWrapper:
         :param artifacts: List of N artifacts. Each artifact is a WxHxDxC NumPy array.
         :return: The tensor containing the estimated fitness (values between 0 and 1)
         """
-        with th.no_grad:
+        with th.no_grad():
             artifacts = th.as_tensor(artifacts).float().to(DEVICE)
             logits = th.softmax(self.net(artifacts), dim=1)
             probabilities, logits = th.max(logits, dim=1)
