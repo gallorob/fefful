@@ -43,11 +43,6 @@ class ArtifactsBuffer:
         self.artifacts = []
         self.fitnesses = []
 
-        # testing
-        for _ in range(self.capacity):
-            self.artifacts.append(np.random.random(size=(2,5,7,5)))
-            self.fitnesses.append(np.random.randint(low=0, high=2))
-
     @property
     def at_capacity(self):
         return len(self.fitnesses) == self.capacity
@@ -128,7 +123,7 @@ class ArtifactsBuffer:
             artifacts = self.artifacts
             fitnesses = self.fitnesses
         artifacts = th.as_tensor(artifacts)
-        fitnesses = th.as_tensor(fitnesses, dtype=th.long)
+        fitnesses = th.as_tensor(fitnesses)
         # pass to dataset builder, return dataloaders
         return self._prepare_dataloaders(
             xs=artifacts,
@@ -173,6 +168,7 @@ class ResidualBlock(nn.Module):
                 num_features=kwargs.get('in_out_channels_res')
             ),
             nn.ReLU(),
+            nn.Dropout(p=0.6),
             nn.Conv3d(
                 in_channels=kwargs.get('in_out_channels_res'),
                 out_channels=kwargs.get('in_out_channels_res'),
@@ -182,7 +178,8 @@ class ResidualBlock(nn.Module):
             ),
             nn.BatchNorm3d(
                 num_features=kwargs.get('in_out_channels_res')
-            )
+            ),
+            nn.Dropout(p=0.6)
         ).to(DEVICE)
 
     def forward(self, x):
@@ -198,15 +195,18 @@ class FitnessEstimator(nn.Module):
         self.seq = nn.Sequential(
             ConvolutionalBlock(**kwargs),
             ResidualBlock(**kwargs),
+            nn.ReLU(),
             ResidualBlock(**kwargs),
             nn.ReLU(),
             nn.Flatten(),
+            nn.Dropout(p=0.5),
             nn.Linear(in_features=kwargs.get('n_features'),
-                      out_features=2)
+                      out_features=1),
+            nn.Sigmoid()
         ).to(DEVICE)
 
     def forward(self, x):
-        return self.seq(x)
+        return self.seq(x).squeeze()
 
 
 class FitnessEstimatorWrapper:
@@ -217,7 +217,7 @@ class FitnessEstimatorWrapper:
         self.test_threshold = test_threshold
         self.can_estimate = False
         self.writer = SummaryWriter()
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCELoss()
         self.optimizer = optim.Adam(self.net.parameters(), lr=0.001)
         self.epoch = 0
         self.train_accuracy = 0.
@@ -228,11 +228,8 @@ class FitnessEstimatorWrapper:
     @staticmethod
     def _binary_acc(predictions,
                     labels):
-        logits = th.softmax(predictions, dim=1)
-        _, logits = th.max(logits, dim=1)
-        correct_results_sum = (logits == labels).float().sum()
-        acc = correct_results_sum / labels.shape[0]
-        return acc
+        correct = (th.round(predictions) == labels).float().sum()
+        return correct / len(labels)
 
     def train(self,
               dataloaders: Dict[str, th.utils.data.DataLoader],
@@ -261,13 +258,13 @@ class FitnessEstimatorWrapper:
                 train_acc += self._binary_acc(predictions=outputs.cpu().detach(),
                                               labels=labels.cpu())
                 bar.set_postfix_str(
-                    s=f"Loss: {train_loss / train_bs}; Acc: {train_acc / train_bs}")
+                    s=f"Loss: {train_loss / train_bs}; Acc: {train_acc}")
                 # log results at the end of training
                 if i == len(train_data) - 1:
                     self.writer.add_scalar('Accuracy/train', train_acc, epoch)
-                    self.writer.add_scalar('Loss/train', train_loss, epoch)
+                    self.writer.add_scalar('Loss/train', train_loss / train_bs, epoch)
                     self.train_accuracy = train_acc
-                    self.train_loss = train_loss
+                    self.train_loss = train_loss / train_bs
                 train_loss = 0.
                 train_acc = 0.
                 bar.update(n=1)
@@ -287,18 +284,18 @@ class FitnessEstimatorWrapper:
                     outputs = self.net(sample)
                     correct += self._binary_acc(predictions=outputs.cpu().detach(),
                                                 labels=labels.cpu())
-                    test_loss += self.criterion(outputs, labels)
-                    total += labels.size(0)
+                    test_loss += self.criterion(outputs, labels) / labels.shape[0]
+                    total += 1
                     bar.set_postfix_str(
                         s=f"Loss: {test_loss / total}; Acc: {correct / total}")
                     bar.update(n=1)
                 bar.set_postfix_str(
-                    s=f"Loss: {test_loss}; Acc: {correct / total}")
+                    s=f"Loss: {test_loss / total}; Acc: {correct / total}")
                 bar.close()
                 self.writer.add_scalar('Accuracy/test', correct / total, epoch)
-                self.writer.add_scalar('Loss/test', test_loss, epoch)
+                self.writer.add_scalar('Loss/test', test_loss / total, epoch)
                 self.val_accuracy = correct / total
-                self.val_loss = test_loss
+                self.val_loss = test_loss / total
 
             self.epoch += 1
 
@@ -306,7 +303,7 @@ class FitnessEstimatorWrapper:
         self.can_estimate = bool(self.test_threshold <= self.val_accuracy)
 
     def estimate(self,
-                 artifacts: List[np.ndarray]) -> th.Tensor:
+                 artifacts: List[np.ndarray]) -> List[float]:
         """
         Estimate the fitness for a batch of artifacts.
 
@@ -314,10 +311,9 @@ class FitnessEstimatorWrapper:
         :return: The tensor containing the estimated fitness (values between 0 and 1)
         """
         with th.no_grad():
+            self.net.eval()
             artifacts = th.as_tensor(artifacts).float().to(DEVICE)
-            logits = th.softmax(self.net(artifacts), dim=1)
-            probabilities, logits = th.max(logits, dim=1)
-            return probabilities * logits
+            return self.net(artifacts).squeeze().detach().cpu().numpy().tolist()
 
     def save(self,
              to_resume: bool,
@@ -360,9 +356,9 @@ class FitnessEstimatorWrapper:
 if __name__ == "__main__":
     from torchsummary import summary
 
-    shape = (2, 5, 10, 5)
+    shape = (2, 5, 7, 5)
     conv_channels = 16
-    shape_after_conv = (16, 5, 10, 5)
+    shape_after_conv = (16, 5, 7, 5)
 
     args = {
         'in_channels_conv': shape[0],

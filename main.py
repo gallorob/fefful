@@ -198,6 +198,11 @@ class MCEvaluator:
                     genome.fitness = fitnesses[i]
                 else:
                     genome.fitness = 1. if i + 1 in fitnesses else 0.
+            if human:
+                for i, artifact in enumerate(promising_artifacts):
+                    self.buffer.add(artifact=promising_artifacts[i],
+                                    fitness=1. if i + 1 in fitnesses else 0.)
+                print(f'Buffer: {len(self.buffer.artifacts)}; At capacity {self.buffer.at_capacity}')
 
         elif not self.fitness_estimator.can_estimate:
             # get user's input
@@ -217,12 +222,13 @@ class MCEvaluator:
             # assign fitness
             for i, (_, genome) in enumerate(promising_genomes):
                 genome.fitness = 1. if i + 1 in fitnesses else 0.
+
         else:
             # get network's estimates
             fitnesses = self.fitness_estimator.estimate(artifacts=promising_artifacts)
             # save fitness in history
             self.history_manager.add_choices(generation=self.generations_counter,
-                                             choices=fitnesses.tolist(),
+                                             choices=fitnesses,
                                              human=False)
             # assign fitness
             for i, (_, genome) in enumerate(promising_genomes):
@@ -236,6 +242,10 @@ class MCEvaluator:
                                              epochs=self.mc_settings.train_epochs)
                 self.fitness_estimator.save(to_resume=True,
                                             where=self.mc_settings.nets_folder)
+
+                if self.fitness_estimator.can_estimate:
+                    self.mc_settings.train_interval += 1
+
             else:
                 self.iterations_counter += 1
 
@@ -303,7 +313,6 @@ if __name__ == '__main__':
 
     th.manual_seed(args.random_seed)
     random.seed(args.random_seed)
-    # TODO is this needed?
     np.random.seed(args.random_seed)
 
     run(n_generations=args.n_generations,
