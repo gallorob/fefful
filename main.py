@@ -239,7 +239,8 @@ class MCEvaluator:
             if not self.fitness_estimator.can_estimate:
                 dataloaders = self.buffer.prepare()
                 self.fitness_estimator.train(dataloaders=dataloaders,
-                                             epochs=self.mc_settings.train_epochs)
+                                             epochs=self.mc_settings.train_epochs,
+                                             generation=self.generations_counter)
                 self.fitness_estimator.save(to_resume=True,
                                             where=self.mc_settings.nets_folder)
 

@@ -216,7 +216,6 @@ class FitnessEstimatorWrapper:
         self.net = FitnessEstimator(**net_args)
         self.test_threshold = test_threshold
         self.can_estimate = False
-        self.writer = SummaryWriter()
         self.criterion = nn.BCELoss()
         self.optimizer = optim.Adam(self.net.parameters(), lr=0.001)
         self.epoch = 0
@@ -233,7 +232,11 @@ class FitnessEstimatorWrapper:
 
     def train(self,
               dataloaders: Dict[str, th.utils.data.DataLoader],
-              epochs: int):
+              epochs: int,
+              generation: int):
+        now = datetime.now()
+        datestr = now.strftime('%Y%m%d%H%M%S')
+        writer = SummaryWriter(os.path.join('runs', f'{datestr}-{generation}'))
         train_data = dataloaders.get('train')
         train_bs = train_data.batch_size
         test_data = dataloaders.get('test')
@@ -261,8 +264,8 @@ class FitnessEstimatorWrapper:
                     s=f"Loss: {train_loss / train_bs}; Acc: {train_acc}")
                 # log results at the end of training
                 if i == len(train_data) - 1:
-                    self.writer.add_scalar('Accuracy/train', train_acc, epoch)
-                    self.writer.add_scalar('Loss/train', train_loss / train_bs, epoch)
+                    writer.add_scalar('Accuracy/train', train_acc, epoch)
+                    writer.add_scalar('Loss/train', train_loss / train_bs, epoch)
                     self.train_accuracy = train_acc
                     self.train_loss = train_loss / train_bs
                 train_loss = 0.
@@ -292,8 +295,8 @@ class FitnessEstimatorWrapper:
                 bar.set_postfix_str(
                     s=f"Loss: {test_loss / total}; Acc: {correct / total}")
                 bar.close()
-                self.writer.add_scalar('Accuracy/test', correct / total, epoch)
-                self.writer.add_scalar('Loss/test', test_loss / total, epoch)
+                writer.add_scalar('Accuracy/test', correct / total, epoch)
+                writer.add_scalar('Loss/test', test_loss / total, epoch)
                 self.val_accuracy = correct / total
                 self.val_loss = test_loss / total
 
