@@ -49,6 +49,8 @@ class MCEvaluator:
         if additional_args.get('history') is not None:
             self.history_manager.load(filename=additional_args.get('history'))
 
+        self.inspect_interval = additional_args.get('inspect_interval')
+
         self.generations_counter = 0
 
     @staticmethod
@@ -188,6 +190,9 @@ class MCEvaluator:
         # User-based fitness assignment
         # spawn blocks on the MC world
         self.client.spawnBlocks(Blocks(blocks=blocks))
+        
+        if self.generations_counter % self.inspect_interval == 0:
+            _ = input('Waiting for user to inspect artifacts, press enter when done: ')
 
         for _, genome in genomes:
             if genome.fitness is None:
@@ -313,6 +318,8 @@ if __name__ == '__main__':
                         help='Optional; Name of Fitness Estimator network')
     parser.add_argument('--resume', dest='to_resume', action='store_true')
     parser.add_argument('--from_scratch', dest='to_resume', action='store_false')
+    parser.add_argument('--inspect_interval', type=int, dest='inspect_interval', default=5,
+                        help='The script will wait for the user to inspect the artifacts (not necessarily for evaluation) with this frequency')
     parser.set_defaults(to_resume=False)
 
     args = parser.parse_args()
@@ -325,5 +332,6 @@ if __name__ == '__main__':
         additional_args={
             'to_resume': args.to_resume,
             'timestep': args.net_name,
-            'history': args.history
+            'history': args.history,
+            'inspect_interval': args.inspect_interval
         })
