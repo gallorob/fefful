@@ -246,6 +246,7 @@ class MCEvaluator:
 
                 if self.fitness_estimator.can_estimate:
                     self.mc_settings.train_interval += 1
+                    self.iterations_counter = 0
 
             else:
                 self.iterations_counter += 1
