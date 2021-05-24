@@ -364,7 +364,7 @@ class FitnessEstimatorWrapper:
             self.iterations_counter = checkpoint.get('iterations_counter', 0)
             self.train_interval = checkpoint.get('train_interval', 0)
             self.min_train_gen = checkpoint.get('min_train_gen', 0)
-            print(f'Loaded: {self.iterations_counter}, {self.train_interval}, {self.min_train_gen}')
+            #print(f'Loaded: {self.iterations_counter}, {self.train_interval}, {self.min_train_gen}')
         else:
             self.net.load_state_dict(th.load(os.path.join(where, f'{timestep}_estimator.pth')))
 
