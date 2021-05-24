@@ -212,6 +212,8 @@ class FitnessEstimator(nn.Module):
 class FitnessEstimatorWrapper:
     def __init__(self,
                  test_threshold: float,
+                 train_interval: int,
+                 min_train_gen: int,
                  net_args):
         self.net = FitnessEstimator(**net_args)
         self.test_threshold = test_threshold
@@ -223,6 +225,10 @@ class FitnessEstimatorWrapper:
         self.train_loss = 0.
         self.val_accuracy = 0.
         self.val_loss = 0.
+        self.iterations_counter = 0
+        self.train_interval = train_interval
+        self.min_train_gen = min_train_gen
+
 
     @staticmethod
     def _binary_acc(predictions,
@@ -332,7 +338,10 @@ class FitnessEstimatorWrapper:
                 'val_accuracy': self.val_accuracy,
                 'estimator_dict': self.net.state_dict(),
                 'can_estimate': self.can_estimate,
-                'optimizer': self.optimizer.state_dict()
+                'optimizer': self.optimizer.state_dict(),
+                'iterations_counter': self.iterations_counter,
+                'train_interval': self.train_interval,
+                'min_train_gen': self.min_train_gen
             }, os.path.join(where, f'{name}.checkpoint'))
         else:
             th.save(self.net.state_dict(),
@@ -352,6 +361,10 @@ class FitnessEstimatorWrapper:
             self.train_accuracy = checkpoint.get('train_accuracy', 0)
             self.val_loss = checkpoint.get('val_loss', 0)
             self.val_accuracy = checkpoint.get('val_accuracy', 0)
+            self.iterations_counter = checkpoint.get('iterations_counter', 0)
+            self.train_interval = checkpoint.get('train_interval', 0)
+            self.min_train_gen = checkpoint.get('min_train_gen', 0)
+            print(f'Loaded: {self.iterations_counter}, {self.train_interval}, {self.min_train_gen}')
         else:
             self.net.load_state_dict(th.load(os.path.join(where, f'{timestep}_estimator.pth')))
 

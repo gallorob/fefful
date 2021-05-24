@@ -30,6 +30,8 @@ class MCEvaluator:
         self.buffer = ArtifactsBuffer(settings=mc_settings)
         self.fitness_estimator = FitnessEstimatorWrapper(
             test_threshold=self.mc_settings.test_threshold,
+            train_interval=self.mc_settings.train_interval,
+            min_train_gen=0,
             net_args={
                 'in_channels_conv': 2,  # block type and rotation
                 'out_channels_conv': self.mc_settings.conv_channels,
@@ -42,8 +44,6 @@ class MCEvaluator:
             self.fitness_estimator.load(to_resume=additional_args.get('to_resume'),
                                         where=mc_settings.nets_folder,
                                         timestep=additional_args.get('timestep'))
-
-        self.iterations_counter = 0
 
         self.history_manager = HistoryManager(mc_settings.history_folder)
         if additional_args.get('history') is not None:
@@ -168,7 +168,7 @@ class MCEvaluator:
             return
 
         # check if we can use the estimator according to number of generations
-        if self.iterations_counter != 0 and self.iterations_counter % self.mc_settings.train_interval == 0:
+        if self.fitness_estimator.iterations_counter != 0 and self.fitness_estimator.iterations_counter % self.fitness_estimator.train_interval == 0:
             self.fitness_estimator.can_estimate = False
 
         # clear user area
@@ -237,19 +237,22 @@ class MCEvaluator:
         # train estimator if possible
         if self.buffer.at_capacity:
             if not self.fitness_estimator.can_estimate:
-                dataloaders = self.buffer.prepare()
-                self.fitness_estimator.train(dataloaders=dataloaders,
-                                             epochs=self.mc_settings.train_epochs,
-                                             generation=self.generations_counter)
-                self.fitness_estimator.save(to_resume=True,
-                                            where=self.mc_settings.nets_folder)
-
-                if self.fitness_estimator.can_estimate:
-                    self.mc_settings.train_interval += 1
-                    self.iterations_counter = 0
+                if self.generations_counter >= self.fitness_estimator.min_train_gen:
+                    dataloaders = self.buffer.prepare()
+                    self.fitness_estimator.train(dataloaders=dataloaders,
+                                                 epochs=self.mc_settings.train_epochs,
+                                                 generation=self.generations_counter)
+    
+                    if self.fitness_estimator.can_estimate:
+                        self.fitness_estimator.train_interval += 1
+                        self.fitness_estimator.iterations_counter = 0
+                    self.fitness_estimator.min_train_gen = max(self.fitness_estimator.min_train_gen, self.generations_counter+1)
+    
+                    self.fitness_estimator.save(to_resume=True,
+                                                where=self.mc_settings.nets_folder)
 
             else:
-                self.iterations_counter += 1
+                self.fitness_estimator.iterations_counter += 1
 
         self.generations_counter += 1
 
